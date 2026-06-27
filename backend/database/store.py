@@ -12,15 +12,22 @@ class ChromaStore:
         self.data_dir = data_dir
         os.makedirs(self.data_dir, exist_ok=True)
         self.client = chromadb.PersistentClient(path=self.data_dir)
-        # Setup the sentence-transformer embedding function
-        self.embedding_fn = embedding_functions.SentenceTransformerEmbeddingFunction(
-            model_name="BAAI/bge-small-en-v1.5"
-        )
-        # Get or create the main repos collection
-        self.collection = self.client.get_or_create_collection(
-            name="repos",
-            embedding_function=self.embedding_fn
-        )
+        self._embedding_fn = None
+        self._collection = None
+
+    @property
+    def collection(self):
+        if self._collection is None:
+            # Setup the sentence-transformer embedding function lazily
+            self._embedding_fn = embedding_functions.SentenceTransformerEmbeddingFunction(
+                model_name="BAAI/bge-small-en-v1.5"
+            )
+            # Get or create the main repos collection lazily
+            self._collection = self.client.get_or_create_collection(
+                name="repos",
+                embedding_function=self._embedding_fn
+            )
+        return self._collection
 
     def _generate_id(self, repo_url: str, chunk: Chunk) -> str:
         # Create a stable ID based on repo, file path, and line numbers
