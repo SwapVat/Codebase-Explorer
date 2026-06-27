@@ -1,0 +1,22 @@
+[
+  {"question": "How does the BaseParser class work?", "expected_file_path": "requests_html.py"},
+  {"question": "How do I render javascript?", "expected_file_path": "requests_html.py"},
+  {"question": "What is the HTMLSession class?", "expected_file_path": "requests_html.py"},
+  {"question": "How do I find elements by CSS selector?", "expected_file_path": "requests_html.py"},
+  {"question": "How do I search using XPath?", "expected_file_path": "requests_html.py"},
+  {"question": "How does the AsyncHTMLSession work?", "expected_file_path": "requests_html.py"},
+  {"question": "What dependencies does this library have?", "expected_file_path": "setup.py"},
+  {"question": "Who is the author of requests-html?", "expected_file_path": "setup.py"},
+  {"question": "How do I install this library?", "expected_file_path": "README.md"},
+  {"question": "What version of Python is required?", "expected_file_path": "setup.py"},
+  {"question": "How do I extract absolute links from a page?", "expected_file_path": "requests_html.py"},
+  {"question": "Is there a way to mock the browser?", "expected_file_path": "requests_html.py"},
+  {"question": "How does the search_all method work?", "expected_file_path": "requests_html.py"},
+  {"question": "How is pyppeteer used in this project?", "expected_file_path": "requests_html.py"},
+  {"question": "Can I get the full text of an element?", "expected_file_path": "requests_html.py"},
+  {"question": "How are tests run?", "expected_file_path": "Makefile"},
+  {"question": "Where is the test for javascript evaluation?", "expected_file_path": "tests/test_requests_html.py"},
+  {"question": "How do I mock requests for testing?", "expected_file_path": "tests/test_requests_html.py"},
+  {"question": "What happens if Chromium is not downloaded?", "expected_file_path": "requests_html.py"},
+  {"question": "How do I paginate through links?", "expected_file_path": "requests_html.py"}
+]
