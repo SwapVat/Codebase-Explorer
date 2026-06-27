@@ -20,7 +20,7 @@ class ChromaStore:
         if self._collection is None:
             # Setup the sentence-transformer embedding function lazily
             self._embedding_fn = embedding_functions.SentenceTransformerEmbeddingFunction(
-                model_name="BAAI/bge-small-en-v1.5"
+                model_name="all-MiniLM-L6-v2"
             )
             # Get or create the main repos collection lazily
             self._collection = self.client.get_or_create_collection(
