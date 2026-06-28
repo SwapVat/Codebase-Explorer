@@ -7,6 +7,17 @@ from chromadb.utils import embedding_functions
 from ingestion.models import Chunk
 from rank_bm25 import BM25Okapi
 
+from chromadb.api.types import Documents, EmbeddingFunction, Embeddings
+from sklearn.feature_extraction.text import HashingVectorizer
+
+class SklearnEmbeddingFunction(EmbeddingFunction):
+    def __init__(self, n_features: int = 1024):
+        self.vectorizer = HashingVectorizer(n_features=n_features, norm='l2')
+
+    def __call__(self, input: Documents) -> Embeddings:
+        sparse_matrix = self.vectorizer.transform(input)
+        return sparse_matrix.toarray().tolist()
+
 class ChromaStore:
     def __init__(self, data_dir: str = "chroma_data"):
         self.data_dir = data_dir
@@ -18,10 +29,8 @@ class ChromaStore:
     @property
     def collection(self):
         if self._collection is None:
-            # Setup the sentence-transformer embedding function lazily
-            self._embedding_fn = embedding_functions.SentenceTransformerEmbeddingFunction(
-                model_name="all-MiniLM-L6-v2"
-            )
+            # Setup the TF-IDF stateless hashing embedding function
+            self._embedding_fn = SklearnEmbeddingFunction(n_features=1024)
             # Get or create the main repos collection lazily
             self._collection = self.client.get_or_create_collection(
                 name="repos",

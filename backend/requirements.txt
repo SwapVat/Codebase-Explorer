@@ -8,7 +8,7 @@ tree-sitter-python
 tree-sitter-javascript
 tree-sitter-typescript
 chromadb
-sentence-transformers
+scikit-learn
 rank_bm25
 openai
 radon
