@@ -15,7 +15,7 @@ class IngestionPipeline:
         self.doc_extensions = {".md", ".txt", ".rst"}
         self.code_extensions = {".py", ".js", ".ts", ".tsx"}
 
-    def process_repo(self, path_or_url: str, branch: str = None) -> tuple[list[Chunk], list[dict]]:
+    def process_repo_batched(self, path_or_url: str, branch: str = None, batch_size: int = 50):
         temp_dir = None
         target_path = path_or_url
 
@@ -24,9 +24,9 @@ class IngestionPipeline:
             temp_dir = tempfile.mkdtemp()
             print(f"Cloning {path_or_url} into {temp_dir} on branch {branch}")
             if branch:
-                Repo.clone_from(path_or_url, temp_dir, branch=branch)
+                Repo.clone_from(path_or_url, temp_dir, branch=branch, depth=1)
             else:
-                Repo.clone_from(path_or_url, temp_dir)
+                Repo.clone_from(path_or_url, temp_dir, depth=1)
             target_path = temp_dir
         
         target_path = Path(target_path).resolve()
@@ -34,8 +34,9 @@ class IngestionPipeline:
         if not target_path.exists() or not target_path.is_dir():
             raise ValueError(f"Invalid path or repository could not be cloned: {target_path}")
 
-        chunks = []
-        smells = []
+        chunks_batch = []
+        smells_batch = []
+        file_count = 0
 
         for root, dirs, files in os.walk(target_path):
             # Modify dirs in-place to skip ignored directories
@@ -51,14 +52,14 @@ class IngestionPipeline:
                 if ext in self.doc_extensions:
                     try:
                         content = file_path.read_text(encoding="utf-8")
-                        chunks.extend(self.doc_parser.parse(rel_path, content))
+                        chunks_batch.extend(self.doc_parser.parse(rel_path, content))
                     except Exception as e:
                         print(f"Error parsing doc {rel_path}: {e}")
                 
                 elif ext in self.code_extensions:
                     try:
                         content = file_path.read_text(encoding="utf-8")
-                        chunks.extend(self.code_parser.parse(rel_path, content))
+                        chunks_batch.extend(self.code_parser.parse(rel_path, content))
                         
                         # Radon static analysis for Python files
                         if ext == ".py":
@@ -66,7 +67,7 @@ class IngestionPipeline:
                                 results = radon_cc.cc_visit(content)
                                 for block in results:
                                     if block.complexity > 10:
-                                        smells.append({
+                                        smells_batch.append({
                                             "file_path": rel_path,
                                             "name": block.name,
                                             "type": type(block).__name__,
@@ -79,8 +80,17 @@ class IngestionPipeline:
                     except Exception as e:
                         print(f"Error parsing code {rel_path}: {e}")
 
+                file_count += 1
+                if file_count >= batch_size:
+                    yield chunks_batch, smells_batch
+                    chunks_batch = []
+                    smells_batch = []
+                    file_count = 0
+
+        if chunks_batch or smells_batch:
+            yield chunks_batch, smells_batch
+
         # Cleanup if cloned
         if temp_dir and os.path.exists(temp_dir):
             shutil.rmtree(temp_dir)
 
-        return chunks, smells

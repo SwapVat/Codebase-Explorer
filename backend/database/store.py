@@ -34,39 +34,21 @@ class ChromaStore:
         unique_str = f"{repo_url}::{chunk.file_path}::{chunk.start_line}::{chunk.end_line}"
         return hashlib.md5(unique_str.encode("utf-8")).hexdigest()
 
-    def refresh_repo(self, repo_url_or_path: str, chunks: list[Chunk], smells: list[dict] = None) -> int:
-        """
-        Deletes existing chunks for the repo, inserts new ones, and builds BM25 and graph.
-        Returns the number of inserted chunks.
-        """
-        import json
-        repo_hash = hashlib.md5(repo_url_or_path.encode()).hexdigest()
-        
-        # Save smells artifact
-        if smells is not None:
-            smells_path = os.path.join(self.data_dir, f"{repo_hash}_smells.json")
-            with open(smells_path, "w") as f:
-                json.dump(smells, f)
-        # First, delete any existing documents for this repo
+        def delete_repo(self, repo_url_or_path: str):
         try:
-            self.collection.delete(
-                where={"repo": repo_url_or_path}
-            )
+            self.collection.delete(where={"repo": repo_url_or_path})
         except Exception:
             pass
 
+    def add_chunks(self, repo_url_or_path: str, chunks: list[Chunk]) -> int:
         if not chunks:
             return 0
-
         ids = []
         documents = []
         metadatas = []
-
         for chunk in chunks:
             ids.append(self._generate_id(repo_url_or_path, chunk))
             documents.append(chunk.content)
-            
-            # Prepare metadata
             meta = {
                 "repo": repo_url_or_path,
                 "file_path": chunk.file_path,
@@ -80,7 +62,6 @@ class ChromaStore:
                         meta[k] = str(v)
             metadatas.append(meta)
 
-        # Batch insert chunks
         BATCH_SIZE = 500
         for i in range(0, len(ids), BATCH_SIZE):
             self.collection.add(
@@ -88,8 +69,30 @@ class ChromaStore:
                 documents=documents[i:i+BATCH_SIZE],
                 metadatas=metadatas[i:i+BATCH_SIZE]
             )
+        return len(ids)
 
-        # Build and save BM25 index
+    def build_indices(self, repo_url_or_path: str, smells: list[dict] = None):
+        import json
+        import hashlib
+        from rank_bm25 import BM25Okapi
+        import pickle
+
+        repo_hash = hashlib.md5(repo_url_or_path.encode()).hexdigest()
+        
+        if smells is not None:
+            smells_path = os.path.join(self.data_dir, f"{repo_hash}_smells.json")
+            with open(smells_path, "w") as f:
+                json.dump(smells, f)
+        
+        # Get all documents for this repo to build BM25 and graph
+        results = self.collection.get(where={"repo": repo_url_or_path})
+        if not results or not results['ids']:
+            return
+
+        documents = results['documents']
+        ids = results['ids']
+        metadatas = results['metadatas']
+
         tokenized_corpus = [re.findall(r'\w+', doc.lower()) for doc in documents]
         bm25 = BM25Okapi(tokenized_corpus)
         bm25_data = {
@@ -98,15 +101,10 @@ class ChromaStore:
             "documents": documents,
             "metadatas": metadatas
         }
-        repo_hash = hashlib.md5(repo_url_or_path.encode()).hexdigest()
         bm25_path = os.path.join(self.data_dir, f"{repo_hash}_bm25.pkl")
         with open(bm25_path, "wb") as f:
             pickle.dump(bm25_data, f)
 
-        # Build and save Dependency Graph
-        import json
-        
-        # Build symbol map: symbol_name -> list of file_paths defining it
         symbol_map = {}
         for meta in metadatas:
             name = meta.get("name")
@@ -116,9 +114,8 @@ class ChromaStore:
                 symbol_map[name].add(meta["file_path"])
                 
         nodes = set()
-        edges = [] # list of {"source": file, "target": file}
+        edges = []
         
-        # Map calls and imports for each file
         file_contents = {}
         for i, meta in enumerate(metadatas):
             fp = meta["file_path"]
@@ -128,27 +125,21 @@ class ChromaStore:
             file_contents[fp] += "\n" + documents[i]
             
         for fp, content in file_contents.items():
-            # Extract calls
             calls = re.findall(r'\b([a-zA-Z_][a-zA-Z0-9_]*)\s*\(', content)
-            # Extract basic imports (from ... import) or (import ...)
             imports = re.findall(r'^import\s+([a-zA-Z0-9_\.]+)', content, re.MULTILINE)
             from_imports = re.findall(r'^from\s+([a-zA-Z0-9_\.]+)\s+import', content, re.MULTILINE)
             
-            # Resolve calls
             for call in calls:
                 if call in symbol_map:
                     for target_fp in symbol_map[call]:
                         if target_fp != fp:
                             edges.append({"source": fp, "target": target_fp, "type": "call"})
                             
-            # Resolve imports (naive module name matching)
             for imp in imports + from_imports:
-                # if we import 'requests_html', look for 'requests_html.py'
                 target_fp = f"{imp.replace('.', '/')}.py"
                 if target_fp in nodes and target_fp != fp:
                     edges.append({"source": fp, "target": target_fp, "type": "import"})
                     
-        # Deduplicate edges
         unique_edges = []
         seen = set()
         for e in edges:
@@ -166,7 +157,6 @@ class ChromaStore:
         with open(graph_path, "w") as f:
             json.dump(graph_data, f)
 
-        return len(ids)
 
     def query_repo(self, query_text: str, repo_url_or_path: str = None, n_results: int = 5):
         where_clause = {"repo": repo_url_or_path} if repo_url_or_path else None
