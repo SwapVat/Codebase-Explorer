@@ -34,7 +34,7 @@ class ChromaStore:
         unique_str = f"{repo_url}::{chunk.file_path}::{chunk.start_line}::{chunk.end_line}"
         return hashlib.md5(unique_str.encode("utf-8")).hexdigest()
 
-        def delete_repo(self, repo_url_or_path: str):
+    def delete_repo(self, repo_url_or_path: str):
         try:
             self.collection.delete(where={"repo": repo_url_or_path})
         except Exception:
